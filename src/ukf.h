@@ -42,6 +42,8 @@ class UKF {
   void UpdateRadar(MeasurementPackage meas_package);
 
 
+  void Update(MeasurementPackage meas_package);
+
   // initially set to false, set to true in first call of ProcessMeasurement
   bool is_initialized_;
 
@@ -113,6 +115,10 @@ class UKF {
 
   // measurement sigma matrix
   Eigen::MatrixXd Zsig_radar_;
+
+  // NIS variables
+  int32_t overcnt_;
+  int32_t allcnt_;
 };
 
 #endif  // UKF_H

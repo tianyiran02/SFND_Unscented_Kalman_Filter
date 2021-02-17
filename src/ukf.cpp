@@ -12,7 +12,7 @@ using Eigen::VectorXd;
  */
 UKF::UKF() {
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = false;
+  use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
@@ -24,10 +24,10 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 1.5;
+  std_a_ = 10;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 2.5;
+  std_yawdd_ = 10;
   
   /**
    * DO NOT MODIFY measurement noise values below.
@@ -74,14 +74,13 @@ UKF::UKF() {
   // Init matrix
   Xsig_pred_ = MatrixXd(n_x_, 2 * n_aug_ + 1);
   Xsig_pred_.fill(0.0);
-  P_ << 1, 0, 0, 0, 0,
-        0, 1, 0, 0, 0,
-        0, 0, 1, 0, 0,
-        0, 0, 0, 0.0225, 0,
-        0, 0, 0, 0, 0.0225;
+
   P_aug_ = MatrixXd(n_aug_, n_aug_);
   P_aug_.fill(0.0);
   x_.fill(0.0);
+
+  overcnt_ = 0;
+  allcnt_ = 0;
 
   std::cout << "==========CP1" << std::endl;
 
@@ -91,6 +90,8 @@ UKF::UKF() {
 UKF::~UKF() {}
 
 void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
+  std::cout << "============= ROUND ===================" << std::endl;
+  std::cout << "previous x_:\n" << x_ << std::endl;
   /**
    * TODO: Complete this function! Make sure you switch between lidar and radar
    * measurements.
@@ -131,16 +132,25 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       // std::cout << "Init py:\n" << py << std::endl;
       // std::cout << "Init v:\n" << v << std::endl;
 
+      P_ << 0.5, 0, 0, 0, 0,
+            0, 0.5, 0, 0, 0,
+            0, 0, 0.75, 0, 0,
+            0, 0, 0, 1, 0,
+            0, 0, 0, 0, 1;
+
       // update time
       time_us_ = meas_package.timestamp_;
-
-      Prediction(0.03);
 
       is_initialized_ = true;
     }
     else
     {
-        std::cout << "==========CP2.2" << std::endl;
+      // here we need to update hte timestamp. The timestamp origin unit is us. We need to map to s.
+      double dt = double(meas_package.timestamp_ - time_us_) / 1e6;
+      time_us_ = meas_package.timestamp_;
+      Prediction(dt);
+
+      std::cout << "==========CP2.2" << std::endl;
       // do radar process
       // create matrix for sigma points in measurement space
       MatrixXd Zsig = MatrixXd(N_RADAR_MEAS, 2 * n_aug_ + 1);
@@ -157,11 +167,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
           double px = Xsig_pred_(0, i);
           double py = Xsig_pred_(1, i);
           double v = Xsig_pred_(2, i);
-          double phi = Xsig_pred_(3, i);
-          double phi_dot = Xsig_pred_(4, i);
+          double yaw = Xsig_pred_(3, i);
+
           Zsig(0, i) = sqrt(pow(px, 2) + pow(py, 2));
-          Zsig(1, i) = atan(py / px);
-          Zsig(2, i) = (px * cos(phi) * v + py * sin(phi) * v) / Zsig(0, i);
+          Zsig(1, i) = atan2(py, px);
+          Zsig(2, i) = (px * cos(yaw) * v + py * sin(yaw) * v) / Zsig(0, i);
       }
       std::cout << "==========CP3" << std::endl;
       std::cout << "Zsig is:\n" << Zsig << std::endl;
@@ -195,6 +205,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       std::cout << "z_pred_radar\n" << z_pred_radar_ << std::endl;
       std::cout << "S_radar_\n" << S_radar_ << std::endl;
       std::cout << "Zsig_radar_\n" << Zsig_radar_ << std::endl;
+
       UpdateRadar(meas_package);
     }
   }
@@ -283,7 +294,6 @@ void UKF::Prediction(double delta_t) {
   std::cout << "==========CP7" << std::endl;
   std::cout << "Xsig_pred_\n" << Xsig_pred_ << std::endl;
 
-
   // Step 3. Update mean and covariance
   // create vector for predicted state
   VectorXd x = VectorXd(n_x_);
@@ -302,7 +312,7 @@ void UKF::Prediction(double delta_t) {
           tempCov(j, i) = (tempCov(j, i) - x(j));
       }
   }
-  
+
   // predicted state covariance matrix
   MatrixXd P = MatrixXd(n_x_, n_x_);
   P.fill(0.0);
@@ -361,7 +371,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
     while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
 
-    Tc = Tc + weights(i) * x_diff * z_diff.transpose() ;
+    Tc = Tc + weights(i) * x_diff * z_diff.transpose();
   }
   // calculate Kalman gain K;
   MatrixXd Kgain = MatrixXd(n_x_, N_RADAR_MEAS);
@@ -379,10 +389,32 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   P_ = P_ - Kgain * S_radar_ * Kgain.transpose();
   x_ = x_ + Kgain * z_diff;
 
-  // here we need to update hte timestamp. The timestamp origin unit is us. We need to map to s.
-  double dt = double(meas_package.timestamp_ - time_us_) / 1e6;
-  time_us_ = meas_package.timestamp_;
-  Prediction(dt);
+  double NIS = z_diff.transpose() * S_radar_.inverse() * z_diff;
 
-  sleep(1);
+  if (NIS > 7.815)
+  {
+    overcnt_ ++;
+  }
+
+  allcnt_ ++;
+
+  std::cout << "NIS over threashold percentage:\n" << (double)overcnt_ / allcnt_ << std::endl;
+  std::cout << "updated z_diff:\n" << z_diff << std::endl;
+  std::cout << "updated x_:\n" << x_ << std::endl;
+
+  //sleep(2);
+}
+
+void UKF::Update(MeasurementPackage meas_package)
+{
+  // if (use_laser_ && meas_package.sensor_type_ == MeasurementPackage::LASER)
+  // {
+  //   // update for Lidar
+  //   UpdateLidar(meas_package);
+  // }
+  // else if (use_radar_ && meas_package.sensor_type_ == MeasurementPackage::RADAR)
+  // {
+  //   // update for Radar
+  //   UpdateRadar(meas_package);
+  // }
 }
