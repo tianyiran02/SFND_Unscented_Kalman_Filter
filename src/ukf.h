@@ -95,6 +95,24 @@ class UKF {
 
   // Sigma point spreading parameter
   double lambda_;
+
+  // predicted sigma points measure matrix for radar measurements
+  Eigen::VectorXd z_pred_radar_;
+
+  // state covariance matrix
+  Eigen::MatrixXd S_radar_;
+
+  // radar weights
+  Eigen::VectorXd weights;
+
+  // augmented covariance matrix
+  Eigen::MatrixXd P_aug_;
+
+  // augmented state matrix
+  Eigen::MatrixXd Xsig_aug_;
+
+  // measurement sigma matrix
+  Eigen::MatrixXd Zsig_radar_;
 };
 
 #endif  // UKF_H
