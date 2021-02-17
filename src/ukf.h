@@ -116,6 +116,11 @@ class UKF {
   // measurement sigma matrix
   Eigen::MatrixXd Zsig_radar_;
 
+  // Lidar measurements update related
+  Eigen::VectorXd z_pred_lidar_;
+  Eigen::MatrixXd S_lidar_;
+  Eigen::MatrixXd Zsig_lidar_;
+
   // NIS variables
   int32_t overcnt_;
   int32_t allcnt_;
